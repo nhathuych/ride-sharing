@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"ride-sharing/services/api-gateway/middleware"
 	"ride-sharing/shared/env"
 )
 
@@ -25,9 +26,14 @@ func main() {
 	mux.HandleFunc("/ws/drivers", handleDriversWebSocket)
 	mux.HandleFunc("/ws/riders", handleRidersWebSocket)
 
+	globalMiddlewares := middleware.Chain(
+		middleware.EnableCORS,
+		middleware.RequestLogger,
+	)
+
 	server := &http.Server{
 		Addr:    httpAddr,
-		Handler: mux,
+		Handler: globalMiddlewares(mux),
 	}
 
 	serverErrors := make(chan error, 1)
