@@ -26,13 +26,14 @@ func (s *HttpHandler) HandleTripPreview(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	fare := &domain.RideFareModel{
-		UserID: "1",
-	}
+	log.Printf("[HandleTripPreview] Received preview request for UserID: %s | Pickup: (%f, %f) -> Destination: (%f, %f)\n",
+		reqBody.UserID,
+		reqBody.Pickup.Latitude, reqBody.Pickup.Longitude,
+		reqBody.Destination.Latitude, reqBody.Destination.Longitude,
+	)
 
 	ctx := r.Context()
-
-	t, err := s.Service.CreateTrip(ctx, fare)
+	t, err := s.Service.GetRoute(ctx, &reqBody.Pickup, &reqBody.Destination)
 	if err != nil {
 		log.Println(err)
 	}
