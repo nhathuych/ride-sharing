@@ -46,6 +46,9 @@ func (h *gRPCHandler) PreviewTrip(ctx context.Context, req *pb.PreviewTripReques
 		return nil, status.Errorf(codes.Internal, "failed to get route: %v", err)
 	}
 
+	// 1. Estimate the ride fares prices based on the route (ex: distance)
+	// 2. Store the ride fares for the create trip (next lesson) to fetch and validate
+
 	return &pb.PreviewTripResponse{
 		Route:     t.ToProto(),
 		RideFares: []*pb.RideFare{},
