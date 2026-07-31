@@ -3,6 +3,7 @@ PROTO_SRC := $(wildcard $(PROTO_DIR)/*.proto)
 GO_OUT := .
 
 .PHONY: generate-proto
+
 generate-proto:
 	protoc \
 		--proto_path=$(PROTO_DIR) \
