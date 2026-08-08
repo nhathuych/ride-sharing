@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"fmt"
+	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -11,6 +12,8 @@ type RabbitMQ struct {
 	conn    *amqp.Connection
 	Channel *amqp.Channel
 }
+
+type MessageHandler func(context.Context, amqp.Delivery) error
 
 func NewRabbitMQ(uri string) (*RabbitMQ, error) {
 	conn, err := amqp.Dial(uri)
@@ -50,6 +53,31 @@ func (r *RabbitMQ) PublishMessage(ctx context.Context, routingKey string, messag
 			DeliveryMode: amqp.Persistent,
 		},
 	)
+}
+
+func (r *RabbitMQ) ConsumeMessages(ctx context.Context, queueName string, handler MessageHandler) error {
+	msgs, err := r.Channel.Consume(
+		queueName, // queue
+		"",        // consumer
+		true,      // auto-ack
+		false,     // exclusive
+		false,     // no-local
+		false,     // no-wait
+		nil,       // args
+	)
+	if err != nil {
+		return err
+	}
+
+	for msg := range msgs {
+		log.Printf("Received a message: %s", msg.Body)
+
+		if err := handler(ctx, msg); err != nil {
+			log.Printf("failed to handle the message: %v", err)
+		}
+	}
+
+	return nil
 }
 
 func (r *RabbitMQ) setupExchangesAndQueues() error {
