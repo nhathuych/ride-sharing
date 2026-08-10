@@ -43,7 +43,7 @@ func main() {
 	defer rabbitmq.Close()
 	log.Println("Starting RabbitMQ connection")
 
-	consumer := NewTripConsumer(rabbitmq)
+	consumer := NewTripConsumer(rabbitmq, service)
 	go func() {
 		if err := consumer.Start(ctx); err != nil {
 			log.Fatalf("Failed to listen to the message: %v", err)
