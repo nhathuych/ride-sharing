@@ -48,6 +48,14 @@ func main() {
 	defer rabbitmq.Close()
 	log.Println("Starting RabbitMQ connection")
 
+	// Start driver consumer
+	driverConsumer := events.NewDriverConsumer(rabbitmq, svc)
+	go func() {
+		if err := driverConsumer.Start(ctx); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
 	publisher := events.NewTripEventPublisher(rabbitmq)
 
 	// Starting the gRPC server
