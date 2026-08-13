@@ -56,6 +56,14 @@ func main() {
 		}
 	}()
 
+	// Start payment consumer
+	paymentConsumer := events.NewPaymentConsumer(rabbitmq, svc)
+	go func() {
+		if err := paymentConsumer.Start(ctx); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
 	publisher := events.NewTripEventPublisher(rabbitmq)
 
 	// Starting the gRPC server

@@ -106,6 +106,10 @@ cp web/.env.example.local web/.env.local
 tilt up
 ```
 
+```bash
+stripe listen --forward-to localhost:8081/webhook/stripe
+```
+
 ## Monitor
 
 ```bash
