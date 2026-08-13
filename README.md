@@ -88,6 +88,18 @@ The tool also auto-generates a `README.md` inside the new service describing the
 
 ---
 
+## Configuration
+
+Secrets are not committed. Create your local file from example:
+
+```bash
+cp infra/development/k8s/secrets.example.yaml infra/development/k8s/secrets.yaml
+```
+
+```bash
+cp web/.env.example.local web/.env.local
+```
+
 ## Run
 
 ```bash
