@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"ride-sharing/services/payment-service/internal/events"
 	"ride-sharing/services/payment-service/internal/infrastructure/stripe"
 	"ride-sharing/services/payment-service/internal/service"
 	"ride-sharing/services/payment-service/pkg/types"
@@ -54,6 +55,14 @@ func main() {
 	// Stripe processor
 	paymentProcessor := stripe.NewStripeClient(stripeCfg)
 	svc := service.NewPaymentService(paymentProcessor)
+
+	// Trip Consumer
+	tripConsumer := events.NewTripConsumer(rabbitmq, svc)
+	go func() {
+		if err := tripConsumer.Start(ctx); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	// Wait for shutdown signal
 	<-ctx.Done()
