@@ -3,6 +3,7 @@ package tracing
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -10,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Config struct {
@@ -39,13 +41,22 @@ func InitTracer(cfg Config) (func(context.Context) error, error) {
 	return traceProvider.Shutdown, nil
 }
 
+func GetTracer(name string) trace.Tracer {
+	return otel.GetTracerProvider().Tracer(name)
+}
+
 func newExporter(endpoint string) (sdktrace.SpanExporter, error) {
 	if endpoint == "" {
 		endpoint = "http://jaeger:4318"
 	}
+	endpoint = strings.TrimPrefix(endpoint, "http://")
+	endpoint = strings.TrimPrefix(endpoint, "https://")
+	endpoint = strings.TrimSuffix(endpoint, "/v1/traces")
+	endpoint = strings.TrimSuffix(endpoint, "/")
+
 	// Dùng WithEndpointURL để nhận luôn "http://jaeger:4318" từ ConfigMap
 	return otlptracehttp.New(context.Background(),
-		otlptracehttp.WithEndpointURL(endpoint),
+		otlptracehttp.WithEndpoint(endpoint),
 		otlptracehttp.WithInsecure(),
 	)
 }

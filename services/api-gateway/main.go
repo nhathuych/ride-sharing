@@ -65,6 +65,7 @@ func main() {
 	})
 
 	globalMiddlewares := middleware.Chain(
+		tracing.Middleware,
 		middleware.EnableCORS,
 		middleware.RequestLogger,
 	)
