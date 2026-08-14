@@ -11,6 +11,11 @@ k8s_yaml('./infra/development/k8s/rabbitmq-deployment.yaml')
 k8s_resource('rabbitmq', port_forwards=['5672', '15672'], labels='tooling')
 ### End RabbitMQ ###
 
+### Jaeger ###
+k8s_yaml('./infra/development/k8s/jaeger.yaml')
+k8s_resource('jaeger', port_forwards=['16686:16686', '4318:4318'], labels="tooling")
+### End of Jaeger ###
+
 ### API Gateway ###
 gateway_compile_cmd = 'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/api-gateway ./services/api-gateway'
 if os.name == 'nt':
