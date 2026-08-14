@@ -1,9 +1,12 @@
 package messaging
 
 import (
+	"context"
 	"encoding/json"
-	"log"
 	"ride-sharing/shared/contracts"
+	"ride-sharing/shared/logger"
+
+	"go.uber.org/zap"
 )
 
 type QueueConsumer struct {
@@ -20,7 +23,7 @@ func NewQueueConsumer(rabbitmq *RabbitMQ, connManager *ConnectionManager, queueN
 	}
 }
 
-func (qc *QueueConsumer) Start() error {
+func (qc *QueueConsumer) Start(ctx context.Context) error {
 	msgs, err := qc.rabbitmq.Channel.Consume(
 		qc.queueName,
 		"",
@@ -34,11 +37,13 @@ func (qc *QueueConsumer) Start() error {
 		return err
 	}
 
+	logger.WithTrace(ctx).Info("Queue consumer started", zap.String("queue", qc.queueName))
+
 	go func() {
 		for msg := range msgs {
 			var msgBody contracts.AmqpMessage
 			if err := json.Unmarshal(msg.Body, &msgBody); err != nil {
-				log.Println("Failed to unmarshal message:", err)
+				logger.WithTrace(ctx).Warn("Failed to unmarshal message", zap.String("queue", qc.queueName), zap.Error(err))
 				continue
 			}
 
@@ -47,7 +52,7 @@ func (qc *QueueConsumer) Start() error {
 			var payload any
 			if msgBody.Data != nil {
 				if err := json.Unmarshal(msgBody.Data, &payload); err != nil {
-					log.Println("Failed to unmarshal payload:", err)
+					logger.WithTrace(ctx).Warn("Failed to unmarshal payload", zap.String("queue", qc.queueName), zap.Error(err))
 					continue
 				}
 			}
@@ -58,7 +63,17 @@ func (qc *QueueConsumer) Start() error {
 			}
 
 			if err := qc.connManager.SendMessage(userID, clientMsg); err != nil {
-				log.Printf("Failed to send message to user %s: %v", userID, err)
+				logger.WithTrace(ctx).Error("Failed to send message to user",
+					zap.String("queue", qc.queueName),
+					zap.String("user_id", userID),
+					zap.Error(err),
+				)
+			} else {
+				logger.WithTrace(ctx).Info("Forwarded message to WS",
+					zap.String("queue", qc.queueName),
+					zap.String("user_id", userID),
+					zap.String("routing_key", msg.RoutingKey),
+				)
 			}
 		}
 	}()

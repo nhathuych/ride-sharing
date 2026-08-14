@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"ride-sharing/services/payment-service/internal/domain"
 	"ride-sharing/services/payment-service/pkg/types"
+	"ride-sharing/shared/logger"
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 type paymentService struct {
@@ -28,6 +30,8 @@ func (s *paymentService) CreatePaymentSession(
 	amount int64,
 	currency string,
 ) (*types.PaymentIntent, error) {
+	logger.WithTrace(ctx).Info("creating stripe checkout session", zap.String("trip_id", tripID), zap.Int64("amount", amount))
+
 	metadata := map[string]string{
 		"trip_id":   tripID,
 		"user_id":   userID,
@@ -50,5 +54,6 @@ func (s *paymentService) CreatePaymentSession(
 		CreatedAt:       time.Now(),
 	}
 
+	logger.WithTrace(ctx).Info("stripe session created", zap.String("session_id", sessionID))
 	return paymentIntent, nil
 }

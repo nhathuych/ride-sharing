@@ -25,6 +25,11 @@ spec:
               memory: "128Mi"
               cpu: "125m"
           env:
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: ENVIRONMENT
             # Accessing an env variable from the app-config config map
             - name: GATEWAY_HTTP_ADDR
               valueFrom:

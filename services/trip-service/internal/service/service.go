@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"ride-sharing/services/trip-service/internal/domain"
 	tripTypes "ride-sharing/services/trip-service/pkg/types"
+	"ride-sharing/shared/logger"
 	pbd "ride-sharing/shared/proto/driver"
 	"ride-sharing/shared/proto/trip"
 	"ride-sharing/shared/types"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.uber.org/zap"
 )
 
 type service struct {
@@ -34,6 +35,7 @@ func (s *service) CreateTrip(ctx context.Context, fare *domain.RideFareModel) (*
 		RideFare: fare,
 		Driver:   &trip.TripDriver{},
 	}
+	logger.WithTrace(ctx).Info("creating trip", zap.String("user_id", fare.UserID), zap.String("fare_id", fare.ID.Hex()))
 
 	return s.repo.CreateTrip(ctx, t)
 }
@@ -47,7 +49,7 @@ func (s *service) GetRoute(ctx context.Context, pickup, destination *types.Coord
 		destination.Latitude,
 	)
 
-	log.Printf("[GetRoute] Requesting OSRM URL: %s\n", url)
+	logger.WithTrace(ctx).Info("requesting OSRM", zap.String("url", url))
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -55,7 +57,7 @@ func (s *service) GetRoute(ctx context.Context, pickup, destination *types.Coord
 	}
 	defer resp.Body.Close()
 
-	log.Printf("[GetRoute] OSRM Response Status: %s (StatusCode: %d)\n", resp.Status, resp.StatusCode)
+	logger.WithTrace(ctx).Info("[GetRoute] OSRM response", zap.String("status", resp.Status), zap.Int("status_code", resp.StatusCode))
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -102,6 +104,7 @@ func (s *service) GenerateTripFares(ctx context.Context, rideFares []*domain.Rid
 		fares[i] = fare
 	}
 
+	logger.WithTrace(ctx).Info("generated trip fares", zap.Int("count", len(fares)), zap.String("user_id", userID))
 	return fares, nil
 }
 

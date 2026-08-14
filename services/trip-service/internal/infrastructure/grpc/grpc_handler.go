@@ -2,12 +2,13 @@ package grpc
 
 import (
 	"context"
-	"log"
 	"ride-sharing/services/trip-service/internal/domain"
 	"ride-sharing/services/trip-service/internal/infrastructure/events"
+	"ride-sharing/shared/logger"
 	pb "ride-sharing/shared/proto/trip"
 	"ride-sharing/shared/types"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -31,6 +32,8 @@ func NewGRPCHandler(server *grpc.Server, service domain.TripService, publisher *
 }
 
 func (h *gRPCHandler) CreateTrip(ctx context.Context, req *pb.CreateTripRequest) (*pb.CreateTripResponse, error) {
+	logger.WithTrace(ctx).Info("CreateTrip request", zap.String("user_id", req.GetUserID()), zap.String("fare_id", req.GetRideFareID()))
+
 	fareID := req.GetRideFareID()
 	userID := req.GetUserID()
 
@@ -51,12 +54,15 @@ func (h *gRPCHandler) CreateTrip(ctx context.Context, req *pb.CreateTripRequest)
 		return nil, status.Errorf(codes.Internal, "failed to publish the trip created event: %v", err)
 	}
 
+	logger.WithTrace(ctx).Info("trip created", zap.String("trip_id", trip.ID.Hex()))
 	return &pb.CreateTripResponse{
 		TripID: trip.ID.Hex(),
 	}, nil
 }
 
 func (h *gRPCHandler) PreviewTrip(ctx context.Context, req *pb.PreviewTripRequest) (*pb.PreviewTripResponse, error) {
+	logger.WithTrace(ctx).Info("PreviewTrip request", zap.String("user_id", req.GetUserID()))
+
 	userID := req.GetUserID()
 	pickup := req.GetStartLocation()
 	destination := req.GetEndLocation()
@@ -72,7 +78,6 @@ func (h *gRPCHandler) PreviewTrip(ctx context.Context, req *pb.PreviewTripReques
 
 	route, err := h.service.GetRoute(ctx, pickupCoord, destinationCoord)
 	if err != nil {
-		log.Println(err)
 		return nil, status.Errorf(codes.Internal, "failed to get route: %v", err)
 	}
 

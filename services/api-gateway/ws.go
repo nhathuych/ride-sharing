@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"ride-sharing/services/api-gateway/grpc_client"
 	"ride-sharing/shared/contracts"
+	"ride-sharing/shared/logger"
 	"ride-sharing/shared/messaging"
 	"ride-sharing/shared/proto/driver"
+
+	"go.uber.org/zap"
 )
 
 var (
@@ -15,22 +17,26 @@ var (
 )
 
 func handleRidersWebSocket(w http.ResponseWriter, r *http.Request, rb *messaging.RabbitMQ) {
+	ctx := r.Context()
+
 	conn, err := connManager.Upgrade(w, r)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
+		logger.WithTrace(ctx).Error("WebSocket upgrade failed", zap.Error(err))
 		return
 	}
 	defer conn.Close()
 
 	userID := r.URL.Query().Get("userID")
 	if userID == "" {
-		log.Println("No user ID provided")
+		logger.WithTrace(ctx).Warn("No user ID provided for rider WS")
 		return
 	}
 
 	// Add connection to manager
-	connManager.Add(userID, conn)
+	connManager.Add(ctx, userID, conn)
 	defer connManager.Remove(userID)
+
+	logger.WithTrace(ctx).Info("Rider connected", zap.String("user_id", userID))
 
 	// Initialize queue consumers
 	queues := []string{
@@ -42,19 +48,19 @@ func handleRidersWebSocket(w http.ResponseWriter, r *http.Request, rb *messaging
 	for _, q := range queues {
 		consumer := messaging.NewQueueConsumer(rb, connManager, q)
 
-		if err := consumer.Start(); err != nil {
-			log.Printf("Failed to start consumer for queue: %s: err: %v", q, err)
+		if err := consumer.Start(ctx); err != nil {
+			logger.WithTrace(ctx).Error("Failed to start consumer for queue", zap.String("queue", q), zap.Error(err))
 		}
 	}
 
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			log.Printf("Error reading message: %v", err)
+			logger.WithTrace(ctx).Warn("Rider WS closed", zap.String("user_id", userID), zap.Error(err))
 			break
 		}
 
-		log.Printf("Received message: %s", message)
+		logger.WithTrace(ctx).Info("Received rider message", zap.String("user_id", userID), zap.ByteString("message", message))
 	}
 }
 
@@ -63,29 +69,29 @@ func handleDriversWebSocket(w http.ResponseWriter, r *http.Request, rb *messagin
 
 	conn, err := connManager.Upgrade(w, r)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
+		logger.WithTrace(ctx).Error("WebSocket upgrade failed", zap.Error(err))
 		return
 	}
 	defer conn.Close()
 
 	userID := r.URL.Query().Get("userID")
 	if userID == "" {
-		log.Println("No user ID provided")
+		logger.WithTrace(ctx).Warn("No user ID provided for driver WS")
 		return
 	}
 
 	packageSlug := r.URL.Query().Get("packageSlug")
 	if packageSlug == "" {
-		log.Println("No package slug provided")
+		logger.WithTrace(ctx).Warn("No package slug provided", zap.String("user_id", userID))
 		return
 	}
 
 	// Add connection to manager
-	connManager.Add(userID, conn)
+	connManager.Add(ctx, userID, conn)
 
 	driverService, err := grpc_client.NewDriverServiceClient()
 	if err != nil {
-		log.Fatal(err)
+		logger.WithTrace(ctx).Fatal("Failed to create driver service client", zap.Error(err))
 	}
 
 	// Closing connections
@@ -96,10 +102,9 @@ func handleDriversWebSocket(w http.ResponseWriter, r *http.Request, rb *messagin
 			DriverID:    userID,
 			PackageSlug: packageSlug,
 		})
-
 		driverService.Close()
 
-		log.Println("Driver unregistered: ", userID)
+		logger.WithTrace(ctx).Info("Driver unregistered", zap.String("user_id", userID))
 	}()
 
 	driverData, err := driverService.Client.RegisterDriver(ctx, &driver.RegisterDriverRequest{
@@ -107,7 +112,7 @@ func handleDriversWebSocket(w http.ResponseWriter, r *http.Request, rb *messagin
 		PackageSlug: packageSlug,
 	})
 	if err != nil {
-		log.Printf("Error registering driver: %v", err)
+		logger.WithTrace(ctx).Error("Error registering driver", zap.String("user_id", userID), zap.Error(err))
 		return
 	}
 
@@ -115,7 +120,7 @@ func handleDriversWebSocket(w http.ResponseWriter, r *http.Request, rb *messagin
 		Type: contracts.DriverCmdRegister,
 		Data: driverData.Driver,
 	}); err != nil {
-		log.Printf("Error sending message: %v", err)
+		logger.WithTrace(ctx).Error("Error sending message", zap.String("user_id", userID), zap.Error(err))
 		return
 	}
 
@@ -127,21 +132,21 @@ func handleDriversWebSocket(w http.ResponseWriter, r *http.Request, rb *messagin
 	for _, q := range queues {
 		consumer := messaging.NewQueueConsumer(rb, connManager, q)
 
-		if err := consumer.Start(); err != nil {
-			log.Printf("Failed to start consumer for queue: %s: err: %v", q, err)
+		if err := consumer.Start(ctx); err != nil {
+			logger.WithTrace(ctx).Error("Failed to start consumer", zap.String("queue", q), zap.Error(err))
 		}
 	}
 
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			log.Printf("Error reading message: %v", err)
+			logger.WithTrace(ctx).Warn("Error reading message", zap.String("user_id", userID), zap.Error(err))
 			break
 		}
 
 		var driverMsg contracts.WSDriverMessage
 		if err := json.Unmarshal(message, &driverMsg); err != nil {
-			log.Printf("Error unmarshaling driver message: %v", err)
+			logger.WithTrace(ctx).Warn("Error unmarshaling driver message", zap.Error(err))
 			continue
 		}
 
@@ -156,10 +161,10 @@ func handleDriversWebSocket(w http.ResponseWriter, r *http.Request, rb *messagin
 				OwnerID: userID,
 				Data:    driverMsg.Data,
 			}); err != nil {
-				log.Printf("Error publishing message to RabbitMQ: %v", err)
+				logger.WithTrace(ctx).Error("Error publishing driver response to RabbitMQ", zap.Error(err))
 			}
 		default:
-			log.Printf("Unknown message type: %s", driverMsg.Type)
+			logger.WithTrace(ctx).Warn("Unknown driver message type", zap.String("type", driverMsg.Type))
 		}
 	}
 }

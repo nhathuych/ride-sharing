@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,8 +10,11 @@ import (
 
 	"ride-sharing/services/api-gateway/middleware"
 	"ride-sharing/shared/env"
+	"ride-sharing/shared/logger"
 	"ride-sharing/shared/messaging"
 	"ride-sharing/shared/tracing"
+
+	"go.uber.org/zap"
 )
 
 var (
@@ -21,7 +23,9 @@ var (
 )
 
 func main() {
-	log.Println("Starting API Gateway")
+	log := logger.Init("api-gateway")
+	defer log.Sync()
+	log.Info("Starting API Gateway")
 
 	// Initialize Tracing
 	tracerCfg := tracing.Config{
@@ -31,24 +35,24 @@ func main() {
 	}
 	shutdownTracer, err := tracing.InitTracer(tracerCfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize the tracer: %v", err)
+		log.Fatal("Failed to initialize tracer", zap.Error(err))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	defer func() {
 		if err := shutdownTracer(ctx); err != nil {
-			log.Printf("Failed to shutdown tracer: %v", err)
+			log.Error("Failed to shutdown tracer", zap.Error(err))
 		}
 	}()
 
 	// RabbitMQ connection
 	rabbitmq, err := messaging.NewRabbitMQ(rabbitMqURI)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Failed to connect RabbitMQ", zap.Error(err))
 	}
 	defer rabbitmq.Close()
-	log.Println("Starting RabbitMQ connection")
+	log.Info("RabbitMQ connected")
 
 	mux := http.NewServeMux()
 
@@ -78,7 +82,7 @@ func main() {
 	serverErrors := make(chan error, 1)
 
 	go func() {
-		log.Printf("Server listening on %s", httpAddr)
+		log.Info("Server listening", zap.String("addr", httpAddr))
 		serverErrors <- server.ListenAndServe()
 	}()
 
@@ -87,20 +91,20 @@ func main() {
 
 	select {
 	case err := <-serverErrors:
-		log.Printf("Error starting the server: %v", err)
+		log.Error("Error starting server", zap.Error(err))
 	case sig := <-shutdown:
-		log.Printf("Server is shutting down due to %v signal", sig)
+		log.Info("Shutting down", zap.String("signal", sig.String()))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
 		if err := server.Shutdown(ctx); err != nil {
-			log.Printf("Could not stop the server gracefully: %v", err)
+			log.Error("Graceful shutdown failed", zap.Error(err))
 
 			if closeErr := server.Close(); closeErr != nil {
-				log.Printf("Could not force close the server: %v", closeErr)
+				log.Error("Could not force close the server", zap.Error(closeErr))
 			}
 		}
-		log.Println("Server stopped gracefully")
+		log.Info("Server stopped gracefully")
 	}
 }

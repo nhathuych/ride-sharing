@@ -2,9 +2,10 @@ package middleware
 
 import (
 	"bufio"
-	"log"
+	"fmt"
 	"net"
 	"net/http"
+	"ride-sharing/shared/logger"
 	"time"
 )
 
@@ -47,23 +48,25 @@ func (rw *responseWriter) Flush() {
 
 func RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("[HTTP] INCOMING -> Method: %s | Path: %s | IP: %s",
-			r.Method,
-			r.URL.Path,
-			r.RemoteAddr,
+		logger.WithTrace(r.Context()).Info(
+			fmt.Sprintf("[HTTP] INCOMING -> Method: %s | Path: %s | IP: %s",
+				r.Method,
+				r.URL.Path,
+				r.RemoteAddr,
+			),
 		)
 
 		start := time.Now()
 		wrappedWriter := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 
 		next.ServeHTTP(wrappedWriter, r)
-
-		duration := time.Since(start)
-		log.Printf("[HTTP] COMPLETED <- Method: %s | Path: %s | Status: %d | Duration: %v\n\n",
-			r.Method,
-			r.URL.Path,
-			wrappedWriter.status,
-			duration,
+		logger.WithTrace(r.Context()).Info(
+			fmt.Sprintf("[HTTP] COMPLETED <- Method: %s | Path: %s | Status: %d | Duration: %v",
+				r.Method,
+				r.URL.Path,
+				wrappedWriter.status,
+				time.Since(start),
+			),
 		)
 	})
 }

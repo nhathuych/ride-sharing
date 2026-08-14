@@ -27,6 +27,12 @@ spec:
               memory: "128Mi"
               cpu: "200m"
           env:
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: ENVIRONMENT
+
             - name: JAEGER_ENDPOINT
               valueFrom:
                 configMapKeyRef:

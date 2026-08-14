@@ -3,12 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"math/rand"
 	"ride-sharing/shared/contracts"
+	"ride-sharing/shared/logger"
 	"ride-sharing/shared/messaging"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.uber.org/zap"
 )
 
 type tripConsumer struct {
@@ -27,39 +28,45 @@ func (c *tripConsumer) Start(ctx context.Context) error {
 	return c.rabbitmq.ConsumeMessages(ctx, messaging.FindAvailableDriversQueue, func(ctx context.Context, msg amqp.Delivery) error {
 		var tripEvent contracts.AmqpMessage
 		if err := json.Unmarshal(msg.Body, &tripEvent); err != nil {
-			log.Printf("Failed to unmarshal message: %v", err)
+			logger.WithTrace(ctx).Error("failed to unmarshal amqp message", zap.Error(err))
 			return err
 		}
 
 		var payload messaging.TripEventData
 		if err := json.Unmarshal(tripEvent.Data, &payload); err != nil {
-			log.Printf("Failed to unmarshal message: %v", err)
+			logger.WithTrace(ctx).Error("failed to unmarshal trip data", zap.Error(err))
 			return err
 		}
 
-		log.Printf("driver received message: %+v", payload)
+		logger.WithTrace(ctx).Info("driver received message",
+			zap.String("routing_key", msg.RoutingKey),
+			zap.String("trip_id", payload.Trip.Id),
+			zap.Any("payload", payload),
+		)
 
 		switch msg.RoutingKey {
 		case contracts.TripEventCreated, contracts.TripEventDriverNotInterested:
 			return c.handleFindAndNotifyDrivers(ctx, payload)
 		}
 
-		log.Printf("unknown trip event: %+v", payload)
-
+		logger.WithTrace(ctx).Warn("unknown trip event", zap.Any("payload", payload))
 		return nil
 	})
 }
 
 func (c *tripConsumer) handleFindAndNotifyDrivers(ctx context.Context, payload messaging.TripEventData) error {
 	suitableIDs := c.service.FindAvailableDrivers(payload.Trip.SelectedFare.PackageSlug)
-	log.Printf("Found suitable drivers: %v", len(suitableIDs))
+	logger.WithTrace(ctx).Info("found suitable drivers",
+		zap.Int("count", len(suitableIDs)),
+		zap.String("package", payload.Trip.SelectedFare.PackageSlug),
+	)
 
 	if len(suitableIDs) == 0 {
 		// Notify the driver that no drivers are available
 		if err := c.rabbitmq.PublishMessage(ctx, contracts.TripEventNoDriversFound, contracts.AmqpMessage{
 			OwnerID: payload.Trip.UserID,
 		}); err != nil {
-			log.Printf("Failed to publish message to exchange: %v", err)
+			logger.WithTrace(ctx).Error("failed to publish no drivers found", zap.Error(err))
 			return err
 		}
 
@@ -79,9 +86,10 @@ func (c *tripConsumer) handleFindAndNotifyDrivers(ctx context.Context, payload m
 		OwnerID: suitableDriverID,
 		Data:    marshalledEvent,
 	}); err != nil {
-		log.Printf("Failed to publish message to exchange: %v", err)
+		logger.WithTrace(ctx).Error("failed to publish driver request", zap.Error(err))
 		return err
 	}
 
+	logger.WithTrace(ctx).Info("notified driver", zap.String("driver_id", suitableDriverID))
 	return nil
 }

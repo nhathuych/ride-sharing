@@ -1,13 +1,15 @@
 package messaging
 
 import (
+	"context"
 	"errors"
-	"log"
 	"net/http"
 	"ride-sharing/shared/contracts"
+	"ride-sharing/shared/logger"
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 )
 
 var (
@@ -47,7 +49,7 @@ func (cm *ConnectionManager) Upgrade(w http.ResponseWriter, r *http.Request) (*w
 	return conn, nil
 }
 
-func (cm *ConnectionManager) Add(id string, conn *websocket.Conn) {
+func (cm *ConnectionManager) Add(ctx context.Context, id string, conn *websocket.Conn) {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 	cm.connections[id] = &connWrapper{
@@ -55,7 +57,7 @@ func (cm *ConnectionManager) Add(id string, conn *websocket.Conn) {
 		mutex: sync.Mutex{},
 	}
 
-	log.Printf("Added connection for user %s", id)
+	logger.WithTrace(ctx).Info("Added connection for user", zap.String("user_id", id))
 }
 
 func (cm *ConnectionManager) Remove(id string) {

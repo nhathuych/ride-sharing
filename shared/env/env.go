@@ -6,6 +6,13 @@ package env
 import (
 	"os"
 	"strconv"
+	"strings"
+)
+
+var (
+	Environment = getEnvironment()
+	IsProd      = isProd(Environment)
+	IsDev       = !IsProd
 )
 
 func GetString(key, fallback string) string {
@@ -43,4 +50,14 @@ func GetBool(key string, fallback bool) bool {
 	}
 
 	return boolVal
+}
+
+func getEnvironment() string {
+	return GetString("ENVIRONMENT", "development")
+}
+
+func isProd(environment string) bool {
+	environment = strings.ToLower(environment)
+
+	return environment == "production" || environment == "prod"
 }

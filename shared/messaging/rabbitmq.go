@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"ride-sharing/shared/contracts"
+	"ride-sharing/shared/logger"
 	"ride-sharing/shared/tracing"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.uber.org/zap"
 )
 
 const (
@@ -48,7 +49,7 @@ func NewRabbitMQ(uri string) (*RabbitMQ, error) {
 }
 
 func (r *RabbitMQ) PublishMessage(ctx context.Context, routingKey string, message contracts.AmqpMessage) error {
-	log.Printf("Publishing message with routing key: %s", routingKey)
+	logger.WithTrace(ctx).Info("Publishing message", zap.String("routing_key", routingKey))
 
 	jsonMsg, err := json.Marshal(message)
 	if err != nil {
@@ -102,15 +103,15 @@ func (r *RabbitMQ) ConsumeMessages(ctx context.Context, queueName string, handle
 
 	for msg := range msgs {
 		if err := tracing.TracedConsumer(msg, func(ctx context.Context, d amqp.Delivery) error {
-			log.Printf("Received a message: %s", msg.Body)
+			logger.WithTrace(ctx).Info("Received a message", zap.String("queue", queueName), zap.ByteString("body", msg.Body))
 
 			if err := handler(ctx, msg); err != nil {
-				log.Printf("ERROR: Failed to handle message: %v. Message body: %s", err, msg.Body)
+				logger.WithTrace(ctx).Error("Failed to handle message", zap.Error(err), zap.ByteString("body", msg.Body))
 
 				// Nack the message. Set requeue to false to avoid immediate redelivery loops.
 				// Consider a dead-letter exchange (DLQ) or a more sophisticated retry mechanism for production.
 				if nackErr := msg.Nack(false, false); nackErr != nil {
-					log.Printf("ERROR: Failed to Nack message: %v", nackErr)
+					logger.WithTrace(ctx).Error("Failed to Nack message", zap.Error(nackErr))
 				}
 
 				return err
@@ -118,12 +119,12 @@ func (r *RabbitMQ) ConsumeMessages(ctx context.Context, queueName string, handle
 
 			// Only Ack if the handler succeeds
 			if ackErr := msg.Ack(false); ackErr != nil {
-				log.Printf("ERROR: Failed to Ack message: %v. Message body: %s", ackErr, msg.Body)
+				logger.WithTrace(ctx).Error("Failed to Ack message", zap.Error(ackErr), zap.ByteString("body", msg.Body))
 			}
 
 			return nil
 		}); err != nil {
-			log.Printf("Error processing message: %v", err)
+			logger.WithTrace(ctx).Error("Error processing message", zap.Error(err))
 		}
 	}
 

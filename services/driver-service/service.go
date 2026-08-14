@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"math/rand/v2"
+	"ride-sharing/shared/logger"
 	pb "ride-sharing/shared/proto/driver"
 	"ride-sharing/shared/util"
 	"sync"
 
 	"github.com/mmcloughlin/geohash"
+	"go.uber.org/zap"
 )
 
 type Service struct {
@@ -26,7 +29,7 @@ func NewService() *Service {
 	}
 }
 
-func (s *Service) RegisterDriver(driverId string, packageSlug string) (*pb.Driver, error) {
+func (s *Service) RegisterDriver(ctx context.Context, driverId string, packageSlug string) (*pb.Driver, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -54,6 +57,7 @@ func (s *Service) RegisterDriver(driverId string, packageSlug string) (*pb.Drive
 		Driver: driver,
 	})
 
+	logger.WithTrace(ctx).Info("driver registered", zap.String("driver_id", driverId), zap.String("plate", randomPlate))
 	return driver, nil
 }
 

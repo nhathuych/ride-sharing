@@ -2,21 +2,24 @@ package main
 
 import (
 	"context"
-	"log"
 	"net"
 	"os"
 	"os/signal"
 	"ride-sharing/shared/env"
+	"ride-sharing/shared/logger"
 	"ride-sharing/shared/messaging"
 	"ride-sharing/shared/tracing"
 	"syscall"
 
+	"go.uber.org/zap"
 	grpcserver "google.golang.org/grpc"
 )
 
 var GrpcAddr = ":9092"
 
 func main() {
+	log := logger.Init("driver-service")
+	defer log.Sync()
 	rabbitMqURI := env.GetString("RABBITMQ_URI", "amqp://guest:guest@rabbitmq:5672/")
 
 	// Initialize Tracing
@@ -27,14 +30,14 @@ func main() {
 	}
 	shutdownTracer, err := tracing.InitTracer(tracerCfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize the tracer: %v", err)
+		log.Fatal("Failed to initialize tracer", zap.Error(err))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	defer func() {
 		if err := shutdownTracer(ctx); err != nil {
-			log.Printf("Failed to shutdown tracer: %v", err)
+			log.Error("Failed to shutdown tracer", zap.Error(err))
 		}
 	}()
 
@@ -49,21 +52,21 @@ func main() {
 
 	lis, err := net.Listen("tcp", GrpcAddr)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatal("failed to listen", zap.Error(err))
 	}
 
 	// RabbitMQ connection
 	rabbitmq, err := messaging.NewRabbitMQ(rabbitMqURI)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("failed to connect rabbitmq", zap.Error(err))
 	}
 	defer rabbitmq.Close()
-	log.Println("Starting RabbitMQ connection")
+	log.Info("RabbitMQ connected")
 
 	consumer := NewTripConsumer(rabbitmq, service)
 	go func() {
 		if err := consumer.Start(ctx); err != nil {
-			log.Fatalf("Failed to listen to the message: %v", err)
+			log.Fatal("Failed to start consumer", zap.Error(err))
 		}
 	}()
 
@@ -71,17 +74,17 @@ func main() {
 	grpcServer := grpcserver.NewServer(tracing.WithTracingInterceptors()...)
 	NewGrpcHandler(grpcServer, service)
 
-	log.Printf("Starting gRPC server Driver Service on port %s", lis.Addr().String())
+	log.Info("Starting gRPC server", zap.String("addr", lis.Addr().String()))
 
 	go func() {
 		if err := grpcServer.Serve(lis); err != nil {
-			log.Printf("failed to serve: %v", err)
+			log.Error("failed to serve", zap.Error(err))
 			cancel()
 		}
 	}()
 
 	// Wait for the shutdown signal
 	<-ctx.Done()
-	log.Println("Shutting down the server...")
+	log.Info("Shutting down server...")
 	grpcServer.GracefulStop()
 }
