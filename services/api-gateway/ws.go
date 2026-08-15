@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"ride-sharing/services/api-gateway/grpc_client"
@@ -60,7 +61,9 @@ func handleRidersWebSocket(w http.ResponseWriter, r *http.Request, rb *messaging
 			break
 		}
 
-		logger.WithTrace(ctx).Info("Received rider message", zap.String("user_id", userID), zap.ByteString("message", message))
+		msgCtx, span := tracer.Start(context.Background(), "websocket.message")
+		logger.WithTrace(msgCtx).Info("Received rider message", zap.String("user_id", userID), zap.ByteString("message", message))
+		span.End()
 	}
 }
 
@@ -144,9 +147,13 @@ func handleDriversWebSocket(w http.ResponseWriter, r *http.Request, rb *messagin
 			break
 		}
 
+		msgCtx, span := tracer.Start(context.Background(), "websocket.message")
+		logger.WithTrace(msgCtx).Info("Received driver message", zap.String("user_id", userID))
+
 		var driverMsg contracts.WSDriverMessage
 		if err := json.Unmarshal(message, &driverMsg); err != nil {
-			logger.WithTrace(ctx).Warn("Error unmarshaling driver message", zap.Error(err))
+			logger.WithTrace(msgCtx).Warn("Error unmarshaling driver message", zap.Error(err))
+			span.End()
 			continue
 		}
 
@@ -154,17 +161,18 @@ func handleDriversWebSocket(w http.ResponseWriter, r *http.Request, rb *messagin
 		switch driverMsg.Type {
 		case contracts.DriverCmdLocation:
 			// Handle driver location update in the future
-			continue
 		case contracts.DriverCmdTripAccept, contracts.DriverCmdTripDecline:
 			// Forward the message to RabbitMQ
-			if err := rb.PublishMessage(ctx, driverMsg.Type, contracts.AmqpMessage{
+			if err := rb.PublishMessage(msgCtx, driverMsg.Type, contracts.AmqpMessage{
 				OwnerID: userID,
 				Data:    driverMsg.Data,
 			}); err != nil {
-				logger.WithTrace(ctx).Error("Error publishing driver response to RabbitMQ", zap.Error(err))
+				logger.WithTrace(msgCtx).Error("Error publishing driver response to RabbitMQ", zap.Error(err))
 			}
 		default:
-			logger.WithTrace(ctx).Warn("Unknown driver message type", zap.String("type", driverMsg.Type))
+			logger.WithTrace(msgCtx).Warn("Unknown driver message type", zap.String("type", driverMsg.Type))
 		}
+
+		span.End()
 	}
 }
