@@ -27,9 +27,6 @@ func main() {
 	defer log.Sync()
 	rabbitMqURI := env.GetString("RABBITMQ_URI", "amqp://guest:guest@rabbitmq:5672/")
 
-	inmemRepo := repository.NewInmemRepository()
-	svc := service.NewService(inmemRepo)
-
 	// Initialize Tracing
 	tracerCfg := tracing.Config{
 		ServiceName:    "trip-service",
@@ -69,7 +66,8 @@ func main() {
 	defer mongoClient.Disconnect(ctx)
 
 	mongoDb := db.GetDatabase(mongoClient, db.NewMongoDefaultConfig())
-	log.Info("MongoDB Info", zap.String("name", mongoDb.Name()))
+	mongoDBRepo := repository.NewMongoRepository(mongoDb)
+	svc := service.NewService(mongoDBRepo)
 
 	// RabbitMQ connection
 	rabbitmq, err := messaging.NewRabbitMQ(rabbitMqURI)
