@@ -30,6 +30,11 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: ENVIRONMENT
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb
+                  key: uri
             - name: RABBITMQ_URI
               valueFrom:
                 secretKeyRef:

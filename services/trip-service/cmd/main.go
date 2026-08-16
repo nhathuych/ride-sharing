@@ -9,6 +9,7 @@ import (
 	"ride-sharing/services/trip-service/internal/infrastructure/grpc"
 	"ride-sharing/services/trip-service/internal/infrastructure/repository"
 	"ride-sharing/services/trip-service/internal/service"
+	"ride-sharing/shared/db"
 	"ride-sharing/shared/env"
 	"ride-sharing/shared/logger"
 	"ride-sharing/shared/messaging"
@@ -59,6 +60,16 @@ func main() {
 	if err != nil {
 		log.Fatal("failed to listen", zap.Error(err))
 	}
+
+	// Initialize MongoDB
+	mongoClient, err := db.NewMongoClient(ctx, db.NewMongoDefaultConfig())
+	if err != nil {
+		log.Fatal("Failed to initialize MongoDB", zap.Error(err))
+	}
+	defer mongoClient.Disconnect(ctx)
+
+	mongoDb := db.GetDatabase(mongoClient, db.NewMongoDefaultConfig())
+	log.Info("MongoDB Info", zap.String("name", mongoDb.Name()))
 
 	// RabbitMQ connection
 	rabbitmq, err := messaging.NewRabbitMQ(rabbitMqURI)
