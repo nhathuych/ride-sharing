@@ -56,3 +56,7 @@ func WithTrace(ctx context.Context) *zap.Logger {
 		zap.String("span_id", spanCtx.SpanID().String()),
 	)
 }
+
+func WithTraceNoCaller(ctx context.Context) *zap.Logger {
+	return WithTrace(ctx).WithOptions(zap.WithCaller(false))
+}

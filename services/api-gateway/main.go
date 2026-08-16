@@ -8,10 +8,11 @@ import (
 	"syscall"
 	"time"
 
-	"ride-sharing/services/api-gateway/middleware"
+	"ride-sharing/shared/db"
 	"ride-sharing/shared/env"
 	"ride-sharing/shared/logger"
 	"ride-sharing/shared/messaging"
+	"ride-sharing/shared/middleware"
 	"ride-sharing/shared/tracing"
 
 	"go.uber.org/zap"
@@ -54,6 +55,15 @@ func main() {
 	defer rabbitmq.Close()
 	log.Info("RabbitMQ connected")
 
+	// Redis connection
+	redisURL := env.GetString("REDIS_URL", "")
+	redisClient, err := db.NewRedisClient(redisURL)
+	if err != nil {
+		log.Fatal("Failed to connect Redis", zap.Error(err))
+	}
+	defer redisClient.Close()
+	log.Info("Redis connected")
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /trip/preview", handleTripPreview)
@@ -68,9 +78,11 @@ func main() {
 		handleStripeWebhook(w, r, rabbitmq)
 	})
 
+	rateLimiter := middleware.NewRateLimiter(redisClient, 100, time.Minute, middleware.IPKey)
 	globalMiddlewares := middleware.Chain(
 		tracing.Middleware,
 		middleware.EnableCORS,
+		rateLimiter.Middleware,
 		middleware.RequestLogger,
 	)
 
